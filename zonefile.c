@@ -164,8 +164,9 @@ zonefile_read(struct zonefile *z, ldns_rr **out)
 		case LDNS_STATUS_OK:
 			if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_SOA) {
 				ldns_rr_free(rr);
+                		rr = 0;
 				z->valid = false;
-				status = LDNS_STATUS_ERR;
+				status = LDNS_STATUS_OK;
 				goto out;
 			}
 			z->count++;
