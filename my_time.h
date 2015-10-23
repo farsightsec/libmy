@@ -50,6 +50,12 @@ my_timespec_sub(const struct timespec *a, struct timespec *b)
 	}
 }
 
+/*
+ * Comparison function for struct timespec suitable for use with bsearch,
+ * qsort, etc.  Returns an integer less than, equal to, or greater than zero
+ * if the first argument is considered to be respectively less than, equal
+ * to, or greater than the second.
+ */
 static inline int
 my_timespec_cmp(const struct timespec *a, const struct timespec *b)
 {
