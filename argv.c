@@ -1223,12 +1223,15 @@ static	int	string_to_value(const char *arg, ARGV_PNT var,
     arr_p = (argv_array_t *)var;
     
     if (arr_p->aa_entry_n == 0) {
-      arr_p->aa_entries = (char *)malloc(ARRAY_INCR *size);
+      arr_p->aa_entries = (char *)calloc(ARRAY_INCR, size);
     }
     else if (arr_p->aa_entry_n % ARRAY_INCR == 0) {
       arr_p->aa_entries =
 	(char *)realloc(arr_p->aa_entries, (arr_p->aa_entry_n + ARRAY_INCR) *
 			size);
+      if (arr_p->aa_entries != NULL)
+	memset((char *)(arr_p->aa_entries) + arr_p->aa_entry_n * size, 0,
+	       ARRAY_INCR*size);
     }
     
     if (arr_p->aa_entries == NULL) {
@@ -1806,7 +1809,7 @@ static	void	display_variables(const argv_t *args)
       int		entry_c, size = 0;
       
       /* find the type and the size for array */
-      if (type_p == NULL) {
+      if (type_p->at_value == 0) {
 	(void)fprintf(argv_error_stream, "%s: illegal variable type %d\n",
 		      __FILE__, val_type);
 	continue;
@@ -2226,7 +2229,7 @@ static	void	file_args(const char *path, argv_t *grid,
     *argv_p = string_copy(line);
     if (*argv_p == NULL) {
       *okay_bp = ARGV_FALSE;
-      return;
+      goto cleanup;
     }
     
     argv_p++;
@@ -2257,7 +2260,8 @@ static	void	file_args(const char *path, argv_t *grid,
   
   /* now do the list */
   do_list(grid, arg_c, argv, queue_list, queue_head_p, queue_tail_p, okay_bp);
-  
+
+cleanup:
   /* now free up the list */
   for (argv_p = argv; argv_p < argv + arg_c; argv_p++) {
     free(*argv_p);
@@ -2721,7 +2725,9 @@ static	void	do_list(argv_t *grid, const int arg_c, char **argv,
 	    case ARGV_LONG:
 	    case ARGV_FLOAT:
 	    case ARGV_DOUBLE:
-              string_to_value(*arg_p, match_p->ar_variable, match_p->ar_type);
+              if (string_to_value(*arg_p, match_p->ar_variable, match_p->ar_type) != NOERROR) {
+		*okay_bp = ARGV_FALSE;
+	      }
 	      char_c = len;
 	      /* we actually used it so we advance the queue tail position */
 	      (*queue_tail_p)++;
@@ -3193,29 +3199,36 @@ int	argv_process_no_env(argv_t *args, const int arg_n, char **argv)
     /* allocate our argument queue */
     queue_list = (argv_t **)malloc(sizeof(argv_t *) * total_arg_n);
     if (queue_list == NULL) {
+      if (env_vect_p != NULL) {
+	free(env_vect_p);
+	free(environ_p);
+      }
       return ERROR;
     }
     queue_head = 0;
     queue_tail = 0;
+
+    /* do the env args before? */
+    if (argv_process_env_b && (! argv_env_after_b) && env_vect_p != NULL) {
+	do_list(args, env_n, env_vect_p, queue_list, &queue_head, &queue_tail,
+		&okay_b);
+	free(env_vect_p);
+	free(environ_p);
+	env_vect_p = NULL;
+    }
+
+    /* do the external args */
+    if (arg_n > 0)
+      do_list(args, arg_n - 1, argv + 1, queue_list, &queue_head, &queue_tail,
+	      &okay_b);
+  
+    /* DO the env args after? */
+    if (argv_process_env_b && argv_env_after_b && env_vect_p != NULL)
+      do_list(args, env_n, env_vect_p, queue_list, &queue_head, &queue_tail,
+	      &okay_b);
   }
-  
-  /* do the env args before? */
-  if (argv_process_env_b && (! argv_env_after_b) && env_vect_p != NULL) {
-    do_list(args, env_n, env_vect_p, queue_list, &queue_head, &queue_tail,
-	    &okay_b);
-    free(env_vect_p);
-    free(environ_p);
-    env_vect_p = NULL;
-  }
-  
-  /* do the external args */
-  do_list(args, arg_n - 1, argv + 1, queue_list, &queue_head, &queue_tail,
-	  &okay_b);
-  
-  /* DO the env args after? */
-  if (argv_process_env_b && argv_env_after_b && env_vect_p != NULL) {
-    do_list(args, env_n, env_vect_p, queue_list, &queue_head, &queue_tail,
-	    &okay_b);
+
+  if (env_vect_p != NULL) {
     free(env_vect_p);
     free(environ_p);
     env_vect_p = NULL;
@@ -3233,7 +3246,7 @@ int	argv_process_no_env(argv_t *args, const int arg_n, char **argv)
   }
   
   /* if we allocated the space then free it */
-  if (arg_n > 0) {
+  if (queue_list) {
     free(queue_list);
   }
   
