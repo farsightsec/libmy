@@ -141,7 +141,7 @@ spooldir_next(struct spooldir *s)
 {
 	struct stat sb;
 	struct dirent *de;
-	char *ret = NULL;
+	uint8_t *ubuf_str = NULL;
 	size_t retsz;
 	char *fname = NULL;
 	ubuf *src_fname;
@@ -197,9 +197,10 @@ spooldir_next(struct spooldir *s)
 		goto out;
 	}
 
-	ubuf_detach(s->fname, (uint8_t **) &ret, &retsz);
+	ubuf_detach(s->fname, &ubuf_str, &retsz);
 out:
 	ubuf_destroy(&src_fname);
 	pthread_mutex_unlock(&s->lock);
-	return (ret);
+
+	return ((char *)ubuf_str);
 }
